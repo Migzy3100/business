@@ -4,6 +4,41 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/mailer.php';
 header('Content-Type: application/json');
 require_auth(['applicant']);
+
+function size_to_bytes(string $value): int
+{
+    $value = trim($value);
+    if ($value === '') {
+        return 0;
+    }
+
+    $unit = strtolower(substr($value, -1));
+    $number = (float)$value;
+    switch ($unit) {
+        case 'g':
+            $number *= 1024;
+            // no break
+        case 'm':
+            $number *= 1024;
+            // no break
+        case 'k':
+            $number *= 1024;
+            break;
+    }
+
+    return (int)$number;
+}
+
+$postMaxBytes = size_to_bytes((string)ini_get('post_max_size'));
+$contentLength = (int)($_SERVER['CONTENT_LENGTH'] ?? 0);
+if ($postMaxBytes > 0 && $contentLength > $postMaxBytes) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'The selected files are too large to submit together. Please compress the PDF files or upload smaller requirement files.',
+    ]);
+    exit;
+}
+
 if (!verify_csrf($_POST['csrf_token'] ?? '')) {
     echo json_encode(['success' => false,'message' => 'Invalid CSRF']);
     exit;
