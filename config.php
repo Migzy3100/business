@@ -23,6 +23,7 @@ define('UI_ALLOWED_ORIGINS', [
     'http://localhost',
     'http://localhost/obs',
     'http://127.0.0.1',
+    'https://portal.malaybalaycity.gov.ph',
 ]);
 
 define('DB_HOST', '192.168.10.247');
