@@ -87,25 +87,50 @@ function flash(string $key, ?string $value = null): ?string
     return $m;
 }
 
+function upload_error_message(int $error): string
+{
+    $messages = [
+        UPLOAD_ERR_INI_SIZE => 'The file is larger than the server upload limit.',
+        UPLOAD_ERR_FORM_SIZE => 'The file is larger than the form upload limit.',
+        UPLOAD_ERR_PARTIAL => 'The file was only partially uploaded.',
+        UPLOAD_ERR_NO_FILE => 'No file was received by the API.',
+        UPLOAD_ERR_NO_TMP_DIR => 'The server upload temporary folder is missing.',
+        UPLOAD_ERR_CANT_WRITE => 'The server could not write the uploaded file.',
+        UPLOAD_ERR_EXTENSION => 'A PHP extension stopped the upload.',
+    ];
+
+    return $messages[$error] ?? 'The server could not accept the uploaded file.';
+}
+
+function last_upload_error(): string
+{
+    return (string)($GLOBALS['last_upload_error'] ?? '');
+}
+
 function upload_file(array $file, string $folder, array $allowed = ['jpg','jpeg','png','pdf','doc','docx']): ?string
 {
+    $GLOBALS['last_upload_error'] = '';
     $uploadError = $file['error'] ?? UPLOAD_ERR_NO_FILE;
     if ($uploadError !== UPLOAD_ERR_OK) {
-        error_log('upload_file failed: upload error ' . $uploadError . ' for folder ' . $folder);
+        $GLOBALS['last_upload_error'] = upload_error_message((int)$uploadError);
+        error_log('upload_file failed: upload error ' . $uploadError . ' for folder ' . $folder . '; ' . $GLOBALS['last_upload_error']);
         return null;
     }
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowed, true)) {
+        $GLOBALS['last_upload_error'] = 'This file type is not allowed. Allowed files: ' . implode(', ', $allowed) . '.';
         error_log('upload_file failed: extension not allowed "' . $ext . '" for file ' . ($file['name'] ?? ''));
         return null;
     }
     $name = uniqid('doc_', true) . '.' . $ext;
     $destDir = UPLOAD_DIR . '/' . trim($folder, '/');
     if (!is_dir($destDir) && !mkdir($destDir, 0775, true)) {
+        $GLOBALS['last_upload_error'] = 'The upload folder could not be created on the server.';
         error_log('upload_file failed: cannot create directory ' . $destDir);
         return null;
     }
     if (!is_writable($destDir)) {
+        $GLOBALS['last_upload_error'] = 'The upload folder is not writable on the server.';
         error_log('upload_file failed: directory is not writable ' . $destDir);
         return null;
     }
@@ -113,7 +138,8 @@ function upload_file(array $file, string $folder, array $allowed = ['jpg','jpeg'
     if (move_uploaded_file($file['tmp_name'], $dest)) {
         return 'uploads/' . trim($folder, '/') . '/' . $name;
     }
-    error_log('upload_file failed: move_uploaded_file failed to ' . $dest);
+    $GLOBALS['last_upload_error'] = 'The server could not move the uploaded file into the upload folder.';
+    error_log('upload_file failed: move_uploaded_file failed to ' . $dest . '; tmp=' . ($file['tmp_name'] ?? '') . '; size=' . ($file['size'] ?? ''));
     return null;
 }
 

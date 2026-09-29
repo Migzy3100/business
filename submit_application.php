@@ -67,7 +67,13 @@ $docMap = [
 foreach ($docMap as $key => $label) {
     $uploaded = upload_file($_FILES[$key] ?? [], 'business_docs');
     if (!$uploaded) {
-        echo json_encode(['success' => false, 'message' => $label . ' upload failed. Please upload a valid file (.pdf/.doc/.docx/image).']);
+        $reason = function_exists('last_upload_error') ? last_upload_error() : '';
+        $message = $label . ' upload failed.';
+        if ($reason !== '') {
+            $message .= ' ' . $reason;
+        }
+        $message .= ' Please upload a valid file (.pdf/.doc/.docx/image).';
+        echo json_encode(['success' => false, 'message' => $message]);
         exit;
     }
     $uploadedFiles[] = [
