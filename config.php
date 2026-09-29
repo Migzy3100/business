@@ -14,7 +14,7 @@ if (!empty($_SERVER['HTTP_HOST'])) {
     define('APP_URL', 'http://localhost/' . APP_BASE_DIR);
 }
 define('APP_TIMEZONE', 'Asia/Manila');
-define('UPLOAD_DIR', dirname(__DIR__) . '/uploads');
+define('UPLOAD_DIR', __DIR__ . '/uploads');
 define('PERMIT_VALID_DAYS', 365);
 define('APP_ENV', 'local'); // local | production
 define('AUTH_TOKEN_TTL_SECONDS', 7200);

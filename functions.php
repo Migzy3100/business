@@ -89,22 +89,31 @@ function flash(string $key, ?string $value = null): ?string
 
 function upload_file(array $file, string $folder, array $allowed = ['jpg','jpeg','png','pdf','doc','docx']): ?string
 {
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+    $uploadError = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        error_log('upload_file failed: upload error ' . $uploadError . ' for folder ' . $folder);
         return null;
     }
     $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
     if (!in_array($ext, $allowed, true)) {
+        error_log('upload_file failed: extension not allowed "' . $ext . '" for file ' . ($file['name'] ?? ''));
         return null;
     }
     $name = uniqid('doc_', true) . '.' . $ext;
     $destDir = UPLOAD_DIR . '/' . trim($folder, '/');
-    if (!is_dir($destDir)) {
-        mkdir($destDir, 0775, true);
+    if (!is_dir($destDir) && !mkdir($destDir, 0775, true)) {
+        error_log('upload_file failed: cannot create directory ' . $destDir);
+        return null;
+    }
+    if (!is_writable($destDir)) {
+        error_log('upload_file failed: directory is not writable ' . $destDir);
+        return null;
     }
     $dest = $destDir . '/' . $name;
     if (move_uploaded_file($file['tmp_name'], $dest)) {
         return 'uploads/' . trim($folder, '/') . '/' . $name;
     }
+    error_log('upload_file failed: move_uploaded_file failed to ' . $dest);
     return null;
 }
 
