@@ -62,6 +62,8 @@ if ($action === 'login') {
         'email' => $user['email'],
         'role' => $user['role'],
     ];
+    set_user_session($user);
+
     app_json_response([
         'success' => true,
         'message' => 'Login successful.',

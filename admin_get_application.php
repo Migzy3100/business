@@ -17,14 +17,34 @@ if ($applicationId <= 0) {
 }
 
 try {
-    $hasPaymentChannelCol = false;
-    try {
-        $hasPaymentChannelCol = (int)$pdo->query("SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'application_payables' AND COLUMN_NAME = 'payment_channel'")->fetch()['c'] > 0;
-    } catch (Throwable $e) {
-        $hasPaymentChannelCol = false;
-    }
+    $hasColumn = static function (string $table, string $column) use ($pdo): bool {
+        try {
+            $stmt = $pdo->prepare("SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+            $stmt->execute([$table, $column]);
+            return (int)$stmt->fetch()['c'] > 0;
+        } catch (Throwable $e) {
+            return false;
+        }
+    };
+    $payableSelect = static function (string $alias, string $table, string $column, string $fallback) use ($hasColumn): string {
+        return $hasColumn($table, $column) ? $alias . '.' . $column : $fallback . ' AS ' . $column;
+    };
 
-    $channelSelect = $hasPaymentChannelCol ? 'ap.payment_channel' : "'online' AS payment_channel";
+    $appChannelSelect = $payableSelect('ap', 'application_payables', 'payment_channel', "'online'");
+    $appGarbageFeeSelect = $payableSelect('ap', 'application_payables', 'garbage_fee', '0');
+    $appSanitaryFeeSelect = $payableSelect('ap', 'application_payables', 'sanitary_fee', '0');
+    $appFireSafetyFeeSelect = $payableSelect('ap', 'application_payables', 'fire_safety_fee', '0');
+    $appZoningFeeSelect = $payableSelect('ap', 'application_payables', 'zoning_fee', '0');
+    $appOtherRegulatoryFeeSelect = $payableSelect('ap', 'application_payables', 'other_regulatory_fee', '0');
+    $appOtherFeeLabelSelect = $payableSelect('ap', 'application_payables', 'other_fee_label', 'NULL');
+
+    $renewalChannelSelect = $payableSelect('rp', 'renewal_payables', 'payment_channel', "'online'");
+    $renewalGarbageFeeSelect = $payableSelect('rp', 'renewal_payables', 'garbage_fee', '0');
+    $renewalSanitaryFeeSelect = $payableSelect('rp', 'renewal_payables', 'sanitary_fee', '0');
+    $renewalFireSafetyFeeSelect = $payableSelect('rp', 'renewal_payables', 'fire_safety_fee', '0');
+    $renewalZoningFeeSelect = $payableSelect('rp', 'renewal_payables', 'zoning_fee', '0');
+    $renewalOtherRegulatoryFeeSelect = $payableSelect('rp', 'renewal_payables', 'other_regulatory_fee', '0');
+    $renewalOtherFeeLabelSelect = $payableSelect('rp', 'renewal_payables', 'other_fee_label', 'NULL');
     $usingRenewalPayables = $renewalId > 0;
 
     if ($usingRenewalPayables) {
@@ -38,7 +58,7 @@ try {
                 a.cctv_count, a.lessor_name, a.monthly_rental, a.lessor_street, a.lessor_barangay, a.lessor_subdivision,
                 a.lessor_city, a.lessor_province, a.lessor_postal_code, a.lessor_tel_no, a.line_of_business,
                 a.employees_male, a.employees_female, a.employees_lgu, a.business_area_sqm,
-                rp.fee_amount AS regulatory_fee, rp.garbage_fee, rp.sanitary_fee, rp.fire_safety_fee, rp.zoning_fee, rp.other_regulatory_fee, rp.other_fee_label, rp.payment_channel, rp.payment_status, rp.sent_at AS payables_sent_at, rp.paid_at AS payment_paid_at,
+                rp.fee_amount AS regulatory_fee, ' . $renewalGarbageFeeSelect . ', ' . $renewalSanitaryFeeSelect . ', ' . $renewalFireSafetyFeeSelect . ', ' . $renewalZoningFeeSelect . ', ' . $renewalOtherRegulatoryFeeSelect . ', ' . $renewalOtherFeeLabelSelect . ', ' . $renewalChannelSelect . ', rp.payment_status, rp.sent_at AS payables_sent_at, rp.paid_at AS payment_paid_at,
                 u.full_name AS applicant_name
             FROM applications a
             JOIN users u ON u.id = a.user_id
@@ -58,7 +78,7 @@ try {
                 a.cctv_count, a.lessor_name, a.monthly_rental, a.lessor_street, a.lessor_barangay, a.lessor_subdivision,
                 a.lessor_city, a.lessor_province, a.lessor_postal_code, a.lessor_tel_no, a.line_of_business,
                 a.employees_male, a.employees_female, a.employees_lgu, a.business_area_sqm,
-                ap.fee_amount AS regulatory_fee, ap.garbage_fee, ap.sanitary_fee, ap.fire_safety_fee, ap.zoning_fee, ap.other_regulatory_fee, ap.other_fee_label, ' . $channelSelect . ', ap.payment_status, ap.sent_at AS payables_sent_at, ap.paid_at AS payment_paid_at,
+                ap.fee_amount AS regulatory_fee, ' . $appGarbageFeeSelect . ', ' . $appSanitaryFeeSelect . ', ' . $appFireSafetyFeeSelect . ', ' . $appZoningFeeSelect . ', ' . $appOtherRegulatoryFeeSelect . ', ' . $appOtherFeeLabelSelect . ', ' . $appChannelSelect . ', ap.payment_status, ap.sent_at AS payables_sent_at, ap.paid_at AS payment_paid_at,
                 u.full_name AS applicant_name
             FROM applications a
             JOIN users u ON u.id = a.user_id

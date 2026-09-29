@@ -25,7 +25,7 @@ $stmt = $pdo->prepare('
         b.business_name AS profile_business_name
     FROM applications a
     JOIN users u ON u.id=a.user_id
-    JOIN businesses b ON b.id=a.business_id
+    LEFT JOIN businesses b ON b.id=a.business_id
     WHERE a.status=?
     ORDER BY a.id DESC
 ');
