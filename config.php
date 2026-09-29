@@ -25,10 +25,10 @@ define('UI_ALLOWED_ORIGINS', [
     'http://127.0.0.1',
 ]);
 
-define('DB_HOST', '127.0.0.1');
-define('DB_NAME', 'obs_system');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_HOST', '192.168.10.247');
+define('DB_NAME', 'onlinebusiness');
+define('DB_USER', 'migz');
+define('DB_PASS', 'root');
 
 $smtpConfig = dirname(__DIR__) . '/smtp_email_files/smtp_config.php';
 if (is_file($smtpConfig)) {
