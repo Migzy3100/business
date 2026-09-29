@@ -1,0 +1,10 @@
+Options -Indexes
+
+<FilesMatch "\.(php|php[0-9]?|phtml|phar|cgi|pl|py|sh|asp|aspx|jsp)$">
+    Require all denied
+</FilesMatch>
+
+AddType application/pdf .pdf
+AddType image/jpeg .jpg .jpeg
+AddType image/png .png
+
