@@ -120,6 +120,29 @@ function resolve_upload_path(string $relPath): ?string
     return null;
 }
 
+// Returns a writable absolute dir for 'uploads/<folder>', trying the API's own uploads dir, then the legacy parent dir.
+// Both map to the same 'uploads/...' relative path, which resolve_upload_path() finds in either location.
+function writable_upload_dir(string $folder): ?string
+{
+    $folder = trim($folder, '/');
+    foreach ([UPLOAD_DIR, dirname(__DIR__) . '/uploads'] as $base) {
+        $dir = $base . '/' . $folder;
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true)) {
+            error_log('writable_upload_dir: cannot create directory ' . $dir);
+            continue;
+        }
+        if (!is_writable($dir)) {
+            @chmod($dir, 0775);
+            clearstatcache(true, $dir);
+        }
+        if (is_writable($dir)) {
+            return $dir;
+        }
+        error_log('writable_upload_dir: directory is not writable ' . $dir);
+    }
+    return null;
+}
+
 function upload_file(array $file, string $folder, array $allowed = ['jpg','jpeg','png','pdf','doc','docx']): ?string
 {
     $GLOBALS['last_upload_error'] = '';
@@ -136,15 +159,9 @@ function upload_file(array $file, string $folder, array $allowed = ['jpg','jpeg'
         return null;
     }
     $name = uniqid('doc_', true) . '.' . $ext;
-    $destDir = UPLOAD_DIR . '/' . trim($folder, '/');
-    if (!is_dir($destDir) && !mkdir($destDir, 0775, true)) {
-        $GLOBALS['last_upload_error'] = 'The upload folder could not be created on the server.';
-        error_log('upload_file failed: cannot create directory ' . $destDir);
-        return null;
-    }
-    if (!is_writable($destDir)) {
+    $destDir = writable_upload_dir($folder);
+    if ($destDir === null) {
         $GLOBALS['last_upload_error'] = 'The upload folder is not writable on the server.';
-        error_log('upload_file failed: directory is not writable ' . $destDir);
         return null;
     }
     $dest = $destDir . '/' . $name;

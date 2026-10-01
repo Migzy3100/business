@@ -113,9 +113,9 @@ function generate_permit_file(PDO $pdo, array $row, ?string &$errorOut = null): 
         return null;
     }
 
-    $approvedDir = UPLOAD_DIR . '/approved_permits';
-    if (!is_dir($approvedDir) && !mkdir($approvedDir, 0775, true)) {
-        $errorOut = 'Cannot create approved permits folder.';
+    $approvedDir = writable_upload_dir('approved_permits');
+    if ($approvedDir === null) {
+        $errorOut = 'Approved permits folder is not writable on the server.';
         return null;
     }
 
