@@ -124,7 +124,7 @@ $enrichDoc = static function (?string $path, ?string $name): array {
     if (!$path) {
         return $result;
     }
-    $fullPath = realpath(__DIR__ . '/../' . ltrim($path, '/'));
+    $fullPath = resolve_upload_path($path);
     if ($fullPath && is_file($fullPath)) {
         $bytes = filesize($fullPath);
         if (is_int($bytes) || is_float($bytes)) {

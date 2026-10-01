@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/mailer.php';
+require_once __DIR__ . '/permit_renderer.php';
 header('Content-Type: application/json');
 require_auth(['admin','staff']);
 
@@ -226,14 +227,23 @@ if ($status === 'approved') {
     $savedStmt = $pdo->prepare('SELECT file_path, original_name FROM approved_application_files WHERE application_id=? LIMIT 1');
     $savedStmt->execute([$id]);
     $savedFile = $savedStmt->fetch(PDO::FETCH_ASSOC);
-    if ($savedFile && !empty($savedFile['file_path'])) {
-        $savedAbsPath = realpath(__DIR__ . '/../' . ltrim((string)$savedFile['file_path'], '/'));
-        if ($savedAbsPath && is_file($savedAbsPath)) {
-            $emailAttachments[] = [
-                'path' => $savedAbsPath,
-                'name' => (string)($savedFile['original_name'] ?? ('Business_Permit_' . (string)$row['reference_no'] . '.jpg')),
-            ];
+    $savedAbsPath = ($savedFile && !empty($savedFile['file_path'])) ? resolve_upload_path((string)$savedFile['file_path']) : null;
+    if ($savedAbsPath === null) {
+        // No digital copy yet: generate it now so the approval email always carries the permit.
+        $permitError = null;
+        $generatedPath = generate_permit_file($pdo, $row, $permitError);
+        if ($generatedPath !== null) {
+            $savedFile = ['file_path' => $generatedPath, 'original_name' => 'Business_Permit_' . (string)$row['reference_no'] . '.jpg'];
+            $savedAbsPath = resolve_upload_path($generatedPath);
+        } else {
+            error_log('Permit auto-generation failed for ' . $row['reference_no'] . ': ' . $permitError);
         }
+    }
+    if ($savedAbsPath !== null) {
+        $emailAttachments[] = [
+            'path' => $savedAbsPath,
+            'name' => (string)($savedFile['original_name'] ?? ('Business_Permit_' . (string)$row['reference_no'] . '.jpg')),
+        ];
     }
 }
 add_notification($pdo, (int)$row['user_id'], 'Application ' . ucfirst($status), 'Your application ' . $row['reference_no'] . ' was ' . $status . '.', $status === 'approved' ? 'success' : 'danger');

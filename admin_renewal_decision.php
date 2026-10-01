@@ -206,7 +206,7 @@ if ($decision === 'approved' && $rowApplicationId !== null) {
     $savedStmt->execute([$rowApplicationId]);
     $savedFile = $savedStmt->fetch(PDO::FETCH_ASSOC);
     if ($savedFile && !empty($savedFile['file_path'])) {
-        $savedAbsPath = realpath(__DIR__ . '/../' . ltrim((string)$savedFile['file_path'], '/'));
+        $savedAbsPath = resolve_upload_path((string)$savedFile['file_path']);
         if ($savedAbsPath && is_file($savedAbsPath)) {
             $emailAttachments[] = [
                 'path' => $savedAbsPath,

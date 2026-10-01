@@ -107,6 +107,19 @@ function last_upload_error(): string
     return (string)($GLOBALS['last_upload_error'] ?? '');
 }
 
+// Resolves a stored 'uploads/...' path, checking the API's own uploads dir first, then the legacy parent dir.
+function resolve_upload_path(string $relPath): ?string
+{
+    $relPath = ltrim($relPath, '/');
+    foreach ([dirname(UPLOAD_DIR), dirname(__DIR__)] as $base) {
+        $full = realpath($base . '/' . $relPath);
+        if ($full && is_file($full)) {
+            return $full;
+        }
+    }
+    return null;
+}
+
 function upload_file(array $file, string $folder, array $allowed = ['jpg','jpeg','png','pdf','doc','docx']): ?string
 {
     $GLOBALS['last_upload_error'] = '';

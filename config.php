@@ -31,27 +31,36 @@ define('DB_NAME', 'onlinebusiness');
 define('DB_USER', 'migz');
 define('DB_PASS', '103100');
 
-$smtpConfig = dirname(__DIR__) . '/smtp_email_files/smtp_config.php';
-if (is_file($smtpConfig)) {
-    require_once $smtpConfig;
+foreach ([__DIR__, dirname(__DIR__)] as $smtpBase) {
+    $smtpConfig = $smtpBase . '/smtp_email_files/smtp_config.php';
+    if (is_file($smtpConfig)) {
+        require_once $smtpConfig;
+        break;
+    }
 }
 if (!defined('MAIL_HOST')) {
-    define('MAIL_HOST', 'smtp.gmail.com');
+    define('MAIL_HOST', getenv('MAIL_HOST') ?: 'smtp.gmail.com');
 }
 if (!defined('MAIL_PORT')) {
-    define('MAIL_PORT', 587);
+    define('MAIL_PORT', (int)(getenv('MAIL_PORT') ?: 587));
 }
 if (!defined('MAIL_USER')) {
-    define('MAIL_USER', '');
+    define('MAIL_USER', getenv('MAIL_USER') ?: '');
 }
 if (!defined('MAIL_PASS')) {
-    define('MAIL_PASS', '');
+    define('MAIL_PASS', getenv('MAIL_PASS') ?: '');
 }
 if (!defined('MAIL_FROM')) {
-    define('MAIL_FROM', MAIL_USER);
+    define('MAIL_FROM', getenv('MAIL_FROM') ?: MAIL_USER);
 }
 if (!defined('MAIL_FROM_NAME')) {
-    define('MAIL_FROM_NAME', 'OBS Permit System');
+    define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: 'OBS Permit System');
+}
+if (!defined('MAIL_REPLY_TO')) {
+    define('MAIL_REPLY_TO', getenv('MAIL_REPLY_TO') ?: MAIL_FROM);
+}
+if (!defined('MAIL_REPLY_TO_NAME')) {
+    define('MAIL_REPLY_TO_NAME', getenv('MAIL_REPLY_TO_NAME') ?: MAIL_FROM_NAME);
 }
 
 define('OTP_EXPIRY_MINUTES', 10);
@@ -142,10 +151,4 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// define('MAIL_HOST', 'smtp.gmail.com');
-// define('MAIL_PORT', 587);
-// define('MAIL_USER', 'gonzagamigue@gmail.com');
-// define('MAIL_PASS', 'cojz imhh wero stap');
-// define('MAIL_FROM', 'gonzagamigue@gmail.com');
-// define('MAIL_FROM_NAME', 'OBS Permit System');
 // define('APP_ENV', 'local'); // local | production

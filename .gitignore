@@ -3,4 +3,4 @@ uploads/**
 !uploads/.htaccess
 !uploads/*/
 !uploads/*/.gitkeep
-
+smtp_email_files/smtp_config.php
