@@ -2,9 +2,7 @@
 
 This folder contains the Gmail SMTP setup used by the OBS Permit System.
 
-- `smtp_config.php` stores the SMTP host, email address, app password, and sender name. It is **not in git** because it holds the password.
-  On a new server, copy `smtp_config.example.php` to `smtp_config.php` and put the Gmail App Password in `MAIL_PASS`,
-  or set the `MAIL_USER` / `MAIL_PASS` environment variables instead.
+- `smtp_config.php` stores the SMTP host, email address, app password, and sender name.
 - `PHPMailer/` contains the copied PHPMailer package.
 - `phpmailer_loader.php` loads PHPMailer from `smtp_email_files/PHPMailer/src`, with Composer and `assets/vendor/PHPMailer/src` as fallbacks.
 - `email_template.php` renders the HTML email layout.
