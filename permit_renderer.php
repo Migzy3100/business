@@ -113,19 +113,29 @@ function generate_permit_file(PDO $pdo, array $row, ?string &$errorOut = null): 
         return null;
     }
 
-    $approvedDir = writable_upload_dir('approved_permits');
-    if ($approvedDir === null) {
-        $errorOut = 'Approved permits folder is not writable on the server.';
-        return null;
-    }
-
     $savedName = 'permit_' . preg_replace('/[^A-Za-z0-9\-_]/', '_', (string)$row['reference_no']) . '_' . date('Ymd_His') . '.jpg';
-    if (!render_business_permit_image($template, $approvedDir . '/' . $savedName, $row)) {
-        $errorOut = 'Failed to render permit image.';
-        return null;
+    $savedRelPath = 'uploads/approved_permits/' . $savedName;
+
+    $approvedDir = writable_upload_dir('approved_permits');
+    if ($approvedDir !== null) {
+        if (!render_business_permit_image($template, $approvedDir . '/' . $savedName, $row)) {
+            $errorOut = 'Failed to render permit image.';
+            return null;
+        }
+    } else {
+        // No writable uploads folder: render into the temp dir and keep the image in stored_files.
+        $tempPath = tempnam(sys_get_temp_dir(), 'permit_');
+        $rendered = $tempPath !== false && render_business_permit_image($template, $tempPath, $row);
+        $content = $rendered ? file_get_contents($tempPath) : false;
+        if ($tempPath !== false) {
+            @unlink($tempPath);
+        }
+        if ($content === false || !store_file_in_db($savedRelPath, $content)) {
+            $errorOut = 'Failed to render or store permit image.';
+            return null;
+        }
     }
 
-    $savedRelPath = 'uploads/approved_permits/' . $savedName;
     try {
         $pdo->prepare('DELETE FROM approved_application_files WHERE application_id=?')->execute([(int)$row['id']]);
         $pdo->prepare('INSERT INTO approved_application_files(application_id, file_path, original_name, created_at) VALUES(?,?,?,NOW())')

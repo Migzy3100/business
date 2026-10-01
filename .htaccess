@@ -1,0 +1,6 @@
+# Uploads stored in the database (when uploads/ is not writable) are served by file.php at their usual URL.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^uploads/(.+)$ file.php?path=uploads/$1 [L,QSA]
+</IfModule>

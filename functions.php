@@ -107,10 +107,33 @@ function last_upload_error(): string
     return (string)($GLOBALS['last_upload_error'] ?? '');
 }
 
-// Resolves a stored 'uploads/...' path, checking the API's own uploads dir first, then the legacy parent dir.
+// Resolves a stored 'uploads/...' path to a readable local file: the API's own uploads dir, then the legacy parent dir,
+// then the stored_files table (copied to the temp dir so callers such as email attachments get a real path).
 function resolve_upload_path(string $relPath): ?string
 {
-    $relPath = ltrim($relPath, '/');
+    $relPath = ltrim(str_replace('\\', '/', $relPath), '/');
+    $diskPath = resolve_upload_disk_path($relPath);
+    if ($diskPath !== null) {
+        return $diskPath;
+    }
+
+    $stored = fetch_stored_file($relPath);
+    if ($stored === null) {
+        return null;
+    }
+    $tempPath = rtrim(sys_get_temp_dir(), '/\\') . '/obs_' . md5($relPath) . '.' . pathinfo($relPath, PATHINFO_EXTENSION);
+    if (!is_file($tempPath) || filesize($tempPath) !== strlen($stored['content'])) {
+        if (file_put_contents($tempPath, $stored['content']) === false) {
+            error_log('resolve_upload_path: cannot write temp copy ' . $tempPath);
+            return null;
+        }
+    }
+    return $tempPath;
+}
+
+function resolve_upload_disk_path(string $relPath): ?string
+{
+    $relPath = ltrim(str_replace('\\', '/', $relPath), '/');
     foreach ([dirname(UPLOAD_DIR), dirname(__DIR__)] as $base) {
         $full = realpath($base . '/' . $relPath);
         if ($full && is_file($full)) {
@@ -124,6 +147,9 @@ function resolve_upload_path(string $relPath): ?string
 // Both map to the same 'uploads/...' relative path, which resolve_upload_path() finds in either location.
 function writable_upload_dir(string $folder): ?string
 {
+    if (UPLOAD_STORAGE === 'database') {
+        return null;
+    }
     $folder = trim($folder, '/');
     foreach ([UPLOAD_DIR, dirname(__DIR__) . '/uploads'] as $base) {
         $dir = $base . '/' . $folder;
@@ -159,18 +185,103 @@ function upload_file(array $file, string $folder, array $allowed = ['jpg','jpeg'
         return null;
     }
     $name = uniqid('doc_', true) . '.' . $ext;
+    $relPath = 'uploads/' . trim($folder, '/') . '/' . $name;
+
     $destDir = writable_upload_dir($folder);
-    if ($destDir === null) {
-        $GLOBALS['last_upload_error'] = 'The upload folder is not writable on the server.';
+    if ($destDir !== null) {
+        if (move_uploaded_file($file['tmp_name'], $destDir . '/' . $name)) {
+            return $relPath;
+        }
+        error_log('upload_file: move_uploaded_file failed to ' . $destDir . '/' . $name . '; storing in database instead');
+    }
+
+    $tmp = (string)($file['tmp_name'] ?? '');
+    $content = is_uploaded_file($tmp) ? file_get_contents($tmp) : false;
+    if ($content !== false && store_file_in_db($relPath, $content)) {
+        return $relPath;
+    }
+    $GLOBALS['last_upload_error'] = 'The server could not store the uploaded file.';
+    error_log('upload_file failed: could not store ' . $relPath . ' on disk or in the database; tmp=' . $tmp . '; size=' . ($file['size'] ?? ''));
+    return null;
+}
+
+function upload_mime_type(string $relPath): string
+{
+    $types = [
+        'pdf' => 'application/pdf',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'png' => 'image/png',
+        'gif' => 'image/gif',
+        'webp' => 'image/webp',
+        'doc' => 'application/msword',
+        'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    return $types[strtolower(pathinfo($relPath, PATHINFO_EXTENSION))] ?? 'application/octet-stream';
+}
+
+// Uploads that cannot be written to disk are kept in stored_files under the same 'uploads/...' path and served by file.php.
+function stored_files_pdo(): ?PDO
+{
+    $pdo = $GLOBALS['pdo'] ?? null;
+    if (!$pdo instanceof PDO) {
         return null;
     }
-    $dest = $destDir . '/' . $name;
-    if (move_uploaded_file($file['tmp_name'], $dest)) {
-        return 'uploads/' . trim($folder, '/') . '/' . $name;
+    static $tableReady = false;
+    if (!$tableReady) {
+        $pdo->exec('CREATE TABLE IF NOT EXISTS stored_files (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            file_path VARCHAR(255) CHARACTER SET ascii NOT NULL,
+            mime_type VARCHAR(120) NOT NULL,
+            file_size INT UNSIGNED NOT NULL,
+            content LONGBLOB NOT NULL,
+            created_at DATETIME NOT NULL,
+            UNIQUE KEY uq_stored_files_path (file_path)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+        $tableReady = true;
     }
-    $GLOBALS['last_upload_error'] = 'The server could not move the uploaded file into the upload folder.';
-    error_log('upload_file failed: move_uploaded_file failed to ' . $dest . '; tmp=' . ($file['tmp_name'] ?? '') . '; size=' . ($file['size'] ?? ''));
-    return null;
+    return $pdo;
+}
+
+function store_file_in_db(string $relPath, string $content): bool
+{
+    try {
+        $pdo = stored_files_pdo();
+        if ($pdo === null) {
+            error_log('store_file_in_db: no database connection');
+            return false;
+        }
+        $stmt = $pdo->prepare('REPLACE INTO stored_files(file_path, mime_type, file_size, content, created_at) VALUES(?,?,?,?,NOW())');
+        $stmt->bindValue(1, $relPath);
+        $stmt->bindValue(2, upload_mime_type($relPath));
+        $stmt->bindValue(3, strlen($content), PDO::PARAM_INT);
+        $stmt->bindValue(4, $content, PDO::PARAM_LOB);
+        return $stmt->execute();
+    } catch (Throwable $e) {
+        error_log('store_file_in_db failed for ' . $relPath . ': ' . $e->getMessage());
+        return false;
+    }
+}
+
+function fetch_stored_file(string $relPath): ?array
+{
+    try {
+        $pdo = stored_files_pdo();
+        if ($pdo === null) {
+            return null;
+        }
+        $stmt = $pdo->prepare('SELECT mime_type, content FROM stored_files WHERE file_path=? LIMIT 1');
+        $stmt->execute([ltrim($relPath, '/')]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row) {
+            return null;
+        }
+        $content = is_resource($row['content']) ? stream_get_contents($row['content']) : (string)$row['content'];
+        return ['mime_type' => (string)$row['mime_type'], 'content' => $content];
+    } catch (Throwable $e) {
+        error_log('fetch_stored_file failed for ' . $relPath . ': ' . $e->getMessage());
+        return null;
+    }
 }
 
 function set_user_session(array $user): void

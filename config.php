@@ -15,6 +15,11 @@ if (!empty($_SERVER['HTTP_HOST'])) {
 }
 define('APP_TIMEZONE', 'Asia/Manila');
 define('UPLOAD_DIR', __DIR__ . '/uploads');
+// 'auto' saves uploads to UPLOAD_DIR and falls back to the stored_files table when the folder is not writable;
+// 'database' always uses the table.
+if (!defined('UPLOAD_STORAGE')) {
+    define('UPLOAD_STORAGE', getenv('UPLOAD_STORAGE') ?: 'auto');
+}
 define('PERMIT_VALID_DAYS', 365);
 define('APP_ENV', 'local'); // local | production
 define('AUTH_TOKEN_TTL_SECONDS', 7200);
