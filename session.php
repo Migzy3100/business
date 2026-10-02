@@ -125,7 +125,37 @@ if ($action === 'register') {
         ? 'Registration successful. Check your email for OTP verification.'
         : 'Registration successful, but OTP email was not sent. Please contact support.';
 
-    app_json_response(['success' => true, 'message' => $message, 'redirect' => 'verify.php']);
+    app_json_response(['success' => true, 'message' => $message, 'redirect' => 'verify.php', 'otp_expires_in' => OTP_EXPIRY_MINUTES * 60]);
+}
+
+if ($action === 'resend_otp') {
+    $email = sanitize((string)($input['email'] ?? ''));
+    $sentMessage = 'A new verification code has been sent to your email.';
+
+    // too_soon: the current code was issued less than a minute ago.
+    $stmt = $pdo->prepare('SELECT id, is_verified, (otp_expires_at IS NOT NULL AND otp_expires_at > DATE_ADD(NOW(), INTERVAL ? SECOND)) AS too_soon FROM users WHERE email=? LIMIT 1');
+    $stmt->execute([OTP_EXPIRY_MINUTES * 60 - 60, $email]);
+    $user = $stmt->fetch();
+    // Unknown or already verified emails get the same reply, so this cannot be used to probe accounts.
+    if (!$user || (int)$user['is_verified'] === 1) {
+        app_json_response(['success' => true, 'message' => $sentMessage, 'otp_expires_in' => OTP_EXPIRY_MINUTES * 60]);
+    }
+    if ((int)$user['too_soon'] === 1) {
+        app_json_response(['success' => false, 'message' => 'Please wait a minute before requesting another code.'], 429);
+    }
+
+    $otp = (string)random_int(100000, 999999);
+    $pdo->prepare('UPDATE users SET otp_code=?, otp_expires_at=DATE_ADD(NOW(), INTERVAL ? MINUTE) WHERE id=?')
+        ->execute([$otp, OTP_EXPIRY_MINUTES, $user['id']]);
+
+    $content = '<h3>Verify your account</h3><p>Your OTP is <strong>' . $otp . '</strong>. It expires in ' . OTP_EXPIRY_MINUTES . ' minutes.</p>';
+    $mailError = null;
+    $sent = send_system_email($pdo, $email, 'Email Verification OTP', render_email_template('Verify Account', $content), (int)$user['id'], $mailError);
+    if (!$sent) {
+        app_json_response(['success' => false, 'message' => 'The verification email could not be sent. Please try again later.'], 502);
+    }
+
+    app_json_response(['success' => true, 'message' => $sentMessage, 'otp_expires_in' => OTP_EXPIRY_MINUTES * 60]);
 }
 
 if ($action === 'verify') {
